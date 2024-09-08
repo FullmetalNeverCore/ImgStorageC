@@ -26,35 +26,42 @@ void imgEndpoint(int client_sock,const char *image_path,int BUFFER_SIZE)
 {
     FILE *img_file = open_image(client_sock,image_path);
 
-    fseek(img_file, 0, SEEK_END);
-    long img_size = ftell(img_file);
-    fseek(img_file, 0, SEEK_SET);  
+    if(img_file != NULL)
+    {
+        fseek(img_file, 0, SEEK_END);
+        long img_size = ftell(img_file);
+        fseek(img_file, 0, SEEK_SET);  
 
-    // Allocate memory 
-    char *img_data = malloc(img_size);
-    if (img_data == NULL) {
-        perror("Memory allocation failed");
+        // Allocate memory 
+        char *img_data = malloc(img_size);
+        if (img_data == NULL) {
+            perror("Memory allocation failed");
+            fclose(img_file);
+            close(client_sock);
+            return;
+        }
+
+        // Read the image content into memory
+        fread(img_data, 1, img_size, img_file);
         fclose(img_file);
+
+        char header[BUFFER_SIZE];
+        snprintf(header, sizeof(header),
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: image/jpeg\r\n"
+            "Content-Length: %ld\r\n"
+            "\r\n", img_size);
+        write(client_sock, header, strlen(header));
+
+        // Send the image content
+        write(client_sock, img_data, img_size);
+
+        free(img_data);
         close(client_sock);
-        return;
     }
-
-    // Read the image content into memory
-    fread(img_data, 1, img_size, img_file);
-    fclose(img_file);
-
-    char header[BUFFER_SIZE];
-    snprintf(header, sizeof(header),
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: image/jpeg\r\n"
-        "Content-Length: %ld\r\n"
-        "\r\n", img_size);
-    write(client_sock, header, strlen(header));
-
-    // Send the image content
-    write(client_sock, img_data, img_size);
-
-    free(img_data);
-    close(client_sock);
+    else
+    {
+        printf("Failed to obtain image");
+    }
 
 }
