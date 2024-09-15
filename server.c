@@ -22,6 +22,9 @@
 #include "Misc/logo.c"
 #include "responses/logoEndPoint.c"
 #include "con_handler.h"
+#include "con_handler.c"
+#include "Misc/getLocIp.h"
+
 
 #define PORT 8080
 #define MAX_CONN 10
@@ -39,6 +42,12 @@ int main() {
 
     printf("C version  0xNCore @2024\n");
 
+    
+    char* locIp = get_local_ip();
+
+    printf("%s\n",locIp);
+
+    free(locIp);
 
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("Socket failed");

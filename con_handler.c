@@ -17,11 +17,13 @@
 #include "responses/logoEndPoint.h"
 #include "server.h"
 #include "con_handler.h"
+#include "Misc/getLocIp.c"
 
 #include "Misc/imgworks.h"
 
 #define BUFFER_SIZE 65500  // 64 KB
 #define CHUNK_SIZE 4096 
+
 
 void handle_client(int client_sock) {
     char buffer[BUFFER_SIZE];
@@ -93,6 +95,7 @@ void handle_client(int client_sock) {
             printf("Path: %s, Content-Length: %d, Client socket: %d, Boundary: %s\n", 
                    path, content_length, client_sock, boundary);
             int save_result = saveFile(path, content_length, client_sock, boundary, full_body);
+            create_json(path);
             printf("saveFile function returned: %d\n", save_result);
 
             free(boundary);
@@ -126,3 +129,34 @@ void handle_client(int client_sock) {
         close(client_sock);
     }
 }
+
+void create_json(char* name) { 
+    char json_content[256];  
+    char file_path[1024];     
+
+    char* locIp = get_local_ip();
+
+    if (locIp != NULL) {
+        printf("Local IP: %s\n", locIp);
+
+        snprintf(file_path, sizeof(file_path), "json_%s/img.json", name);
+
+        snprintf(json_content, sizeof(json_content), "{\"link\":\"http://%s:5005/%s\"}", locIp, name);
+
+        FILE *file = fopen(file_path, "w");
+        if (file == NULL) {
+            printf("Error: Could not create the file %s\n", file_path);
+        } else {
+            fprintf(file, "%s\n", json_content);
+
+            fclose(file);
+
+            printf("File %s created with JSON content.\n", file_path);
+        }
+
+        free(locIp);
+    } else {
+        printf("Error: Could not retrieve local IP address.\n");
+    }
+}
+
