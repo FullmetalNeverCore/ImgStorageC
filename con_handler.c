@@ -28,10 +28,11 @@
 void handle_client(int client_sock) {
     char buffer[BUFFER_SIZE];
     int bytes_read, total_bytes_read = 0;
-    char request[BUFFER_SIZE * 10] = {0}; // Larger buffer to accumulate request
+    char request[BUFFER_SIZE * 10] = {0}; 
 
     while ((bytes_read = read(client_sock, buffer, sizeof(buffer) - 1)) > 0) {
-        strncat(request, buffer, bytes_read);
+        buffer[bytes_read] = '\0';
+        strcat(request, buffer);
         total_bytes_read += bytes_read;
 
         if (strstr(request, "\r\n\r\n")) {
@@ -61,8 +62,6 @@ void handle_client(int client_sock) {
         printf("Content-Length extracted: %d\n", content_length);
         
         if (content_length > 0) {
-            printf("Content-Length: %d\n", content_length);
-
             char *boundary = extract_boundary(request);
             if (boundary == NULL) {
                 printf("Failed to extract boundary from headers.\n");
@@ -72,36 +71,67 @@ void handle_client(int client_sock) {
 
             printf("Extracted boundary: '%s'\n", boundary);
 
-            char *full_body = requestBody(content_length, client_sock);
-            if (full_body == NULL) {
-                printf("Failed to read full request body.\n");
-                free(boundary);
-                close(client_sock);
-                return;
-            }
+            
+            char *header_end = strstr(request, "\r\n\r\n");
+            if (header_end != NULL) {
+                header_end += 4;
+                int header_length = header_end - request;
+                int body_bytes_in_buffer = total_bytes_read - header_length;
 
-            char *path = extract_path(full_body, boundary);
-            if (path == NULL) {
-                printf("Failed to extract path from request body.\n");
+                char *full_body = malloc(content_length + 1);
+                if (full_body == NULL) {
+                    perror("Memory allocation failed");
+                    free(boundary);
+                    close(client_sock);
+                    return;
+                }
+
+                memcpy(full_body, header_end, body_bytes_in_buffer);
+
+                int remaining_bytes = content_length - body_bytes_in_buffer;
+                int offset = body_bytes_in_buffer;
+
+                while (remaining_bytes > 0) {
+                    bytes_read = read(client_sock, full_body + offset, remaining_bytes);
+                    if (bytes_read <= 0) {
+                        perror("Error reading request body");
+                        free(full_body);
+                        free(boundary);
+                        close(client_sock);
+                        return;
+                    }
+                    offset += bytes_read;
+                    remaining_bytes -= bytes_read;
+                }
+
+                full_body[content_length] = '\0'; 
+
+                char *path = extract_path(full_body, boundary);
+                if (path == NULL) {
+                    printf("Failed to extract path from request body.\n");
+                    free(boundary);
+                    free(full_body);
+                    close(client_sock);
+                    return;
+                }
+
+                printf("Successfully extracted path: %s\n", path);
+
+                int save_result = saveFile(path, content_length, client_sock, boundary, full_body);
+                create_json(path);
+                printf("saveFile function returned: %d\n", save_result);
+
                 free(boundary);
+                free(path);
                 free(full_body);
+                okSucc(client_sock);
+                close(client_sock);
+            } else {
+                printf("Failed to find end of headers.\n");
+                free(boundary);
                 close(client_sock);
                 return;
             }
-
-            printf("Successfully extracted path: %s\n", path);
-
-            printf("Calling saveFile function...\n");
-            printf("Path: %s, Content-Length: %d, Client socket: %d, Boundary: %s\n", 
-                   path, content_length, client_sock, boundary);
-            int save_result = saveFile(path, content_length, client_sock, boundary, full_body);
-            create_json(path);
-            printf("saveFile function returned: %d\n", save_result);
-
-            free(boundary);
-            free(path);
-            free(full_body);
-            okSucc(client_sock);
         } else {
             printf("No Content-Length header found or invalid value.\n");
         }
